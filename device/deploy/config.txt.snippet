@@ -1,0 +1,9 @@
+# --- AsthmaGuard (append to /boot/firmware/config.txt, then reboot) ---
+# I2C1 on GPIO2 (SDA) / GPIO3 (SCL): MAX30102 + MPU6050
+dtparam=i2c_arm=on
+dtparam=i2c_arm_baudrate=400000
+# INMP441 I2S microphone: BCLK GPIO18, LRCLK GPIO19, DIN GPIO20 (L/R pin to GND)
+dtparam=i2s=on
+dtoverlay=googlevoicehat-soundcard
+# Servo: hardware PWM0 on GPIO12
+dtoverlay=pwm,pin=12,func=4

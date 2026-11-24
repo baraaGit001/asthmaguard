@@ -1,0 +1,189 @@
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <new>
+
+#include "tensorflow/lite/micro/compatibility.h"
+#include "tensorflow/lite/micro/kernels/internal/common.h"
+#include "tensorflow/lite/micro/kernels/internal/quantization_util.h"
+#include "tensorflow/lite/micro/kernels/internal/reference/integer_ops/logistic.h"
+#include "tensorflow/lite/micro/kernels/internal/reference/logistic.h"
+#include "tensorflow/lite/micro/kernels/internal/tensor_ctypes.h"
+#include "tensorflow/lite/micro/kernels/kernel_util.h"
+#include "tensorflow/lite/micro/kernels/logistic.h"
+#include "tensorflow/lite/micro/micro_common.h"
+#include "tensorflow/lite/micro/micro_context.h"
+#include "tensorflow/lite/micro/micro_log.h"
+#include "tensorflow/lite/micro/micro_utils.h"
+
+namespace tflite {
+namespace micro {
+namespace {
+
+TfLiteStatus CalculateArithmeticOpDataLogisticImpl(TfLiteContext* context,
+                                                   const TfLiteTensor* input,
+                                                   const TfLiteTensor* output,
+                                                   OpDataLogistic* data) {
+  TF_LITE_ENSURE_TYPES_EQ(context, input->type, output->type);
+  TF_LITE_ENSURE(context, HaveSameShapes(input, output));
+
+  if (input->type == kTfLiteInt8) {
+    TF_LITE_ENSURE_EQ(context, output->params.zero_point,
+                      std::numeric_limits<int8_t>::min());
+
+    static constexpr int kInputIntegerBits = 4;
+    const double input_real_multiplier =
+        static_cast<double>(input->params.scale) *
+        static_cast<double>(1 << (31 - kInputIntegerBits));
+
+    data->input_zero_point = input->params.zero_point;
+
+    const double q = std::frexp(input_real_multiplier, &data->input_left_shift);
+    data->input_multiplier = static_cast<int32_t>(TfLiteRound(q * (1ll << 31)));
+
+    data->input_range_radius =
+        CalculateInputRadius(kInputIntegerBits, data->input_left_shift, 31);
+  } else if (input->type == kTfLiteInt16) {
+    static constexpr int kInputIntegerBits = 3;
+    static constexpr int kOutputFractionalBits = 15;
+
+    // See comments in TanhPrepare about requiring zero_point==0
+    // and a power-of-two ("POT") scale.
+
+    TF_LITE_ENSURE_EQ(context, input->params.zero_point, 0);
+    TF_LITE_ENSURE_EQ(context, output->params.zero_point, 0);
+
+    int input_scale_log2_rounded;
+    bool param_scale_pot =
+        CheckedLog2(input->params.scale, &input_scale_log2_rounded);
+
+    data->input_left_shift =
+        (15 - kInputIntegerBits) + input_scale_log2_rounded;
+    param_scale_pot &= (data->input_left_shift == 0);
+
+    if (param_scale_pot) {
+      data->input_multiplier = 0;
+    } else {
+      // Calculate multiplier to change input scale to 1/(3*4096)
+      // as required by the table lookup.
+      // In this scaling +/-2^17 represents +/-10.7
+      double multiplier =
+          static_cast<double>(input->params.scale) * 4096.0 * 3.0;
+
+      data->input_left_shift = 0;
+
+      while (multiplier <= 32767.0 / 2.0 && data->input_left_shift <= 30) {
+        data->input_left_shift++;
+        multiplier = multiplier * 2.0;
+      }
+
+      data->input_multiplier = static_cast<int32_t>(multiplier);
+    }
+    TFLITE_DCHECK_LE(data->input_multiplier, 32767);
+    int output_scale_log2_rounded;
+    TF_LITE_ENSURE(
+        context, CheckedLog2(output->params.scale, &output_scale_log2_rounded));
+    TF_LITE_ENSURE_EQ(context, output_scale_log2_rounded,
+                      -kOutputFractionalBits);
+  } else if (input->type != kTfLiteFloat32) {
+    MicroPrintf("Input %s, output %s not supported.",
+                TfLiteTypeGetName(input->type),
+                TfLiteTypeGetName(output->type));
+    return kTfLiteError;
+  }
+
+  return kTfLiteOk;
+}
+
+}  // namespace
+
+TfLiteStatus CalculateArithmeticOpDataLogistic(TfLiteContext* context,
+                                               TfLiteNode* node,
+                                               OpDataLogistic* data) {
+  TF_LITE_ENSURE_EQ(context, NumInputs(node), 1);
+  TF_LITE_ENSURE_EQ(context, NumOutputs(node), 1);
+
+  MicroContext* micro_context = GetMicroContext(context);
+
+  TfLiteTensor* input =
+      micro_context->AllocateTempInputTensor(node, kLogisticInputTensor);
+  TF_LITE_ENSURE(context, input != nullptr);
+  TfLiteTensor* output =
+      micro_context->AllocateTempOutputTensor(node, kLogisticOutputTensor);
+  TF_LITE_ENSURE(context, output != nullptr);
+
+  TF_LITE_ENSURE_OK(context, CalculateArithmeticOpDataLogisticImpl(
+                                 context, input, output, data));
+
+  micro_context->DeallocateTempTfLiteTensor(input);
+  micro_context->DeallocateTempTfLiteTensor(output);
+  return kTfLiteOk;
+}
+
+void* LogisticInitReference(TfLiteContext* context, const char* buffer,
+                            size_t length) {
+  void* data =
+      context->AllocatePersistentBuffer(context, sizeof(OpDataLogistic));
+  if (data == nullptr) {
+    return nullptr;
+  }
+  return new (data) OpDataLogistic();
+}
+
+TfLiteStatus LogisticPrepareReference(TfLiteContext* context,
+                                      TfLiteNode* node) {
+  TF_LITE_ENSURE(context, node->user_data != nullptr);
+  OpDataLogistic* data = static_cast<OpDataLogistic*>(node->user_data);
+
+  return CalculateArithmeticOpDataLogistic(context, node, data);
+}
+
+template <>
+void LogisticEvalReference<float>(const OpDataLogistic& /*data*/,
+                                  const TfLiteEvalTensor* input,
+                                  TfLiteEvalTensor* output) {
+  reference_ops::Logistic(tflite::micro::GetTensorShape(input),
+                          tflite::micro::GetTensorData<float>(input),
+                          tflite::micro::GetTensorShape(output),
+                          tflite::micro::GetTensorData<float>(output));
+}
+
+template <>
+void LogisticEvalReference<int16_t>(const OpDataLogistic& data,
+                                    const TfLiteEvalTensor* input,
+                                    TfLiteEvalTensor* output) {
+  reference_integer_ops::Logistic(
+      data.input_multiplier, data.input_left_shift, NumElements(input->dims),
+      tflite::micro::GetTensorData<int16_t>(input),
+      tflite::micro::GetTensorData<int16_t>(output));
+}
+
+template <>
+void LogisticEvalReference<int8_t>(const OpDataLogistic& data,
+                                   const TfLiteEvalTensor* input,
+                                   TfLiteEvalTensor* output) {
+  reference_integer_ops::Logistic(
+      data.input_zero_point, data.input_range_radius, data.input_multiplier,
+      data.input_left_shift, NumElements(input->dims),
+      tflite::micro::GetTensorData<int8_t>(input),
+      tflite::micro::GetTensorData<int8_t>(output));
+}
+
+}  // namespace micro
+}  // namespace tflite

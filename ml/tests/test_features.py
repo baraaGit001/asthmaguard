@@ -1,4 +1,4 @@
-"""The C++ features (firmware/src/sensors/features.cpp, used on the Pico and
+"""The C++ features (device/src/core/sensors/features.cpp, used on the Zero 2 W and
 for training) must match the independent numpy reference on the same WAVs.
 
 Run: ml/.venv/bin/python -m pytest ml/tests -q

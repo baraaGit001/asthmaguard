@@ -40,7 +40,8 @@ class LiveData {
   final int cough60;
   final String activity;
   final String state;
-  final int battery;
+  final int battery; // -1 = no battery (Zero 2 W on USB power)
+  bool get hasBattery => battery >= 0;
   final bool sim;
   final int pending;
   final bool doseEnabled;
@@ -72,7 +73,7 @@ class LiveData {
         cough60: i('c60'),
         activity: (j['act'] as String?) ?? 'REST',
         state: (j['st'] as String?) ?? 'NORMAL',
-        battery: i('bat'),
+        battery: (j['bat'] as num?)?.round() ?? -1,
         sim: i('sim') == 1,
         pending: i('pend'),
         doseEnabled: i('dose') == 1,

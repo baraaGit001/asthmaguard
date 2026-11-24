@@ -4,7 +4,7 @@ push it.
   python ml/make_kernel.py               # writes ml/out/kernel/
   python ml/make_kernel.py --push --user <kaggle-user>   # also `kaggle kernels push`
 
-The kernel embeds firmware/src/sensors/features.{h,cpp}, so training uses
+The kernel embeds device/src/core/sensors/features.{h,cpp}, so training uses
 exactly the feature code that runs on the Pico.
 """
 from __future__ import annotations
@@ -27,8 +27,8 @@ DATASETS = [
 ]
 
 FILES = {
-    "features.h": ROOT / "firmware/src/sensors/features.h",
-    "features.cpp": ROOT / "firmware/src/sensors/features.cpp",
+    "features.h": ROOT / "device/src/core/sensors/features.h",
+    "features.cpp": ROOT / "device/src/core/sensors/features.cpp",
     "features_lib.py": HERE / "features_lib.py",
     "pipeline.py": HERE / "pipeline.py",
 }
@@ -55,17 +55,23 @@ def main():
     ap.add_argument("--user", default=os.environ.get("KAGGLE_USERNAME"),
                     help="Kaggle username that owns the kernel (or set KAGGLE_USERNAME)")
     ap.add_argument("--kaggle", default="kaggle")
+    ap.add_argument("--export-from", metavar="KERNEL",
+                    help="export-only run: reuse model.keras from this kernel's output (<user>/<slug>)")
     args = ap.parse_args()
     if not args.user:
         ap.error("--user or KAGGLE_USERNAME is required")
 
-    out = HERE / "out" / "kernel"
+    slug = KERNEL_SLUG + ("-export" if args.export_from else "")
+    out = HERE / "out" / ("kernel-export" if args.export_from else "kernel")
     out.mkdir(parents=True, exist_ok=True)
     files = {k: base64.b64encode(p.read_bytes()).decode() for k, p in FILES.items()}
-    (out / "train_kernel.py").write_text(TEMPLATE.format(files=json.dumps(files)))
+    code = TEMPLATE.format(files=json.dumps(files))
+    if args.export_from:
+        code = code.replace('import pipeline\n', 'os.environ["AG_REUSE"] = "1"\nimport pipeline\n')
+    (out / "train_kernel.py").write_text(code)
     meta = {
-        "id": f"{args.user}/{KERNEL_SLUG}",
-        "title": KERNEL_SLUG,
+        "id": f"{args.user}/{slug}",
+        "title": slug,
         "code_file": "train_kernel.py",
         "language": "python",
         "kernel_type": "script",
@@ -74,7 +80,7 @@ def main():
         "enable_internet": True,
         "dataset_sources": DATASETS,
         "competition_sources": [],
-        "kernel_sources": [],
+        "kernel_sources": [args.export_from] if args.export_from else [],
     }
     (out / "kernel-metadata.json").write_text(json.dumps(meta, indent=2))
     print("wrote", out)

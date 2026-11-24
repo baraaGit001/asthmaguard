@@ -3,6 +3,7 @@
 Spec: docs/PLAN.md. This file names the next task.
 
 ## Done
+- **2026-11-24 board change (owner): Raspberry Pi Zero 2 W, all C++, USB power, no battery.** The Pico firmware was removed. `device/` = one program `asthmaguardd` (CMake): the unchanged tested logic in `src/core`, Linux drivers in `src/hw` (I2C ioctl for MAX30102 + MPU6050, GPIO character device, hardware PWM servo, ALSA I2S microphone thread), BlueZ GATT server over sd-bus in `src/ble` (same UUIDs/JSON as before, app unchanged except the battery tile), atomic persistence of config + pending events, Unix-socket console, `--selftest`, systemd unit + `deploy/setup.sh`. TFLM vendored fresh from tensorflow/tflite-micro (`third_party/tflm/SOURCE.txt`). Logic tests: 21/21 pass on Linux.
 - **Phase 2** core logic (pure C++, host-tested): config (JSON, range-checked), detector rules, cough counter, state machine, event log, simulation mode, button gestures, activity + arm-raise detector, PPG HR/SpO2 algorithm. `pio test -e native`: all 13 section-8 scenarios + unit tests pass.
 - **Phase 1/3** code written: MPU6050 (register driver), MAX30102 (SparkFun) + own PPG algorithm, actuators (non-blocking patterns, servo puff), BLE GATT service on the Arduino-Pico `BLE` library, serial console (`HELP`, `VERBOSE:1` bring-up print), main.cpp core split. Not yet compiled for the board (framework download).
 - **Phase 4** features: firmware/src/sensors/features.cpp is compiled into the Python pipeline (ctypes) and matches an independent numpy implementation (ml/tests). Training kernel pushed to Kaggle (`<kaggle-user>/asthmaguard-cough-train`, see ml/make_kernel.py).
@@ -18,5 +19,7 @@ Spec: docs/PLAN.md. This file names the next task.
 - APK is built on GitHub Actions (Android build tools do not run on the aarch64 server).
 
 ## Next
-- Compile firmware for pico2w, fix build errors, check RAM/flash.
-- Fetch Kaggle model output, copy model_data.* + golden.h into firmware/lib/model, report into ml/.
+- Build + ctest in the Bookworm arm64 container (`device/deploy/build.Containerfile`), fix errors; CI `device` job green.
+- Fetch the Kaggle export (model_data.* + golden.h → device/model, report.json → ml/); `test_model` must match the TFLite reference.
+- Hugging Face release `baraa00109/asthmaguard-cough` (`ml/hf_release.py`) after the owner logs the server in.
+- On the real Zero 2 W (team): `setup.sh`, `asthmaguardd --selftest`, nRF Connect check of the GATT service, then the app.

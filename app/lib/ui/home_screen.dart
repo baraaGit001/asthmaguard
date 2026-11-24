@@ -77,15 +77,19 @@ class HomeScreen extends StatelessWidget {
           Expanded(
             child: _Tile(icon: Icons.graphic_eq, label: l.t('coughs_min'), value: live == null ? '—' : '${live.cough60}'),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _Tile(
-              icon: _batteryIcon(live?.battery),
-              label: l.t('battery'),
-              value: live == null ? '—' : '${live.battery}',
-              unit: live == null ? '' : '%',
+          // The Zero 2 W runs from USB power: no battery tile unless the
+          // device reports a level (bat >= 0).
+          if (live != null && live.hasBattery) ...[
+            const SizedBox(width: 12),
+            Expanded(
+              child: _Tile(
+                icon: _batteryIcon(live.battery),
+                label: l.t('battery'),
+                value: '${live.battery}',
+                unit: '%',
+              ),
             ),
-          ),
+          ],
         ]),
         if (live != null) ...[
           const SizedBox(height: 8),

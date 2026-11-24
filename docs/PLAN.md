@@ -8,6 +8,8 @@
 
 ## 1. Fixed decisions
 
+> **Amendment 2026-11-24 (owner):** the board is a **Raspberry Pi Zero 2 W**, not the Pico 2 W. The software is one C++ program on Raspberry Pi OS (`device/`, systemd service): BLE through BlueZ, microphone through ALSA (I2S overlay), servo on hardware PWM. The device runs from a **USB power supply with no battery**, so there is no battery level or low-battery warning. The original rows below are kept for history; where they say Pico, Arduino-Pico or PlatformIO, read Zero 2 W / Linux / CMake. The cough model is trained with our own Kaggle pipeline (`ml/`), not Edge Impulse.
+
 | Topic | Decision |
 |---|---|
 | Patients | Adults, 18+ |

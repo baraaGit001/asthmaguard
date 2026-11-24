@@ -48,6 +48,15 @@ void main() {
       expect(LiveData.tryParse('{"hr":1}', t0), isNull);
     });
 
+    test('bat -1 or missing means no battery (Zero 2 W on USB power)', () {
+      final usb = LiveData.tryParse('{"hr":88,"spo2":97,"v":1,"c60":0,"act":"REST","st":"NORMAL","bat":-1}', t0)!;
+      expect(usb.hasBattery, isFalse);
+      final missing = LiveData.tryParse('{"st":"NORMAL"}', t0)!;
+      expect(missing.hasBattery, isFalse);
+      final lipo = LiveData.tryParse('{"st":"NORMAL","bat":0}', t0)!;
+      expect(lipo.hasBattery, isTrue);
+    });
+
     test('parses event JSON and falls back to receive time without a clock', () {
       final e = DeviceEvent.tryParse(
           '{"id":123,"t":0,"up":50,"type":"DOSE","data":{"hr":110,"spo2":95,"v":1,"c60":4,"n":1,"max":2}}', t0)!;

@@ -1,4 +1,4 @@
-"""ctypes wrapper around firmware/src/sensors/features.cpp.
+"""ctypes wrapper around device/src/core/sensors/features.cpp.
 
 The training pipeline computes its features with the *same C++ code* that
 runs on the Pico, so the two can never drift apart. The shared library is
@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-DEFAULT_SRC = HERE.parent / "firmware" / "src" / "sensors"
+DEFAULT_SRC = HERE.parent / "device" / "src" / "core" / "sensors"
 
 
 def _src_dir() -> Path:

@@ -1,0 +1,22 @@
+[Unit]
+Description=AsthmaGuard wrist monitor
+After=bluetooth.service sound.target
+Wants=bluetooth.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/asthmaguardd
+Restart=always
+RestartSec=2
+# config.json + pending events live here (survive reboots / pulled cable)
+StateDirectory=asthmaguard
+# console socket: sudo nc -U /run/asthmaguard/console
+RuntimeDirectory=asthmaguard
+# Root is needed for BlueZ GATT/advertising registration, GPIO, I2C, PWM sysfs.
+User=root
+Nice=-5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
