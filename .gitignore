@@ -1,0 +1,16 @@
+.pio/
+.vscode/
+__pycache__/
+*.pyc
+ml/data/
+ml/out/
+ml/.venv/
+kaggle.json
+.env
+app/build/
+app/.dart_tool/
+app/.flutter-plugins*
+app/android/local.properties
+app/android/key.properties
+*.jks
+*.keystore
